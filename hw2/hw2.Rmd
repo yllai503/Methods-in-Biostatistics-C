@@ -1,0 +1,135 @@
+---
+title: "Biostat 200C Homework 2"
+subtitle: Due Apr 26 @ 11:59PM
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+```
+
+## Q1. Beta-Binomial 
+
+Let $Y_i$ be the number of successes in $n_i$ trials with
+$$
+Y_i \sim \text{Bin}(n_i, \pi_i),
+$$
+where the probabilities $\pi_i$ have a Beta distribution
+$$
+\pi \sim \text{Be}(\alpha, \beta)
+$$
+with density function
+$$
+f(x; \alpha, \beta) = \frac{\Gamma(\alpha + \beta)}{\Gamma(\alpha) \Gamma(\beta)} x^{\alpha - 1} (1 - x)^{\beta - 1}, \quad x \in [0, 1], \alpha > 0, \beta > 0.
+$$
+
+### 1.1
+
+Find the mean and variance of $\pi$.
+
+Solution: See the pdf file attached.
+
+### 1.2
+
+Find the mean and variance of $Y_i$ and show that the variance of $Y_i$ is always larger than or equal to that of a Binomial random variable with the same batch size and mean.
+
+Solution: See the pdf file attached.
+
+## Q2. Poisson regression log-likelihood 
+
+Let $Y_1,\ldots,Y_n$ be independent random variables with $Y_i \sim \text{Poisson}(\mu_i)$ and $\log \mu_i = \mathbf{x}_i^T \boldsymbol{\beta}$, $i = 1,\ldots,n$.
+
+### 2.1
+
+Write down the log-likelihood function.
+
+Solution: See the pdf file attached.
+
+### 2.2
+
+Derive the gradient vector of the log-likelihood function with respect to the regression coefficients $\boldsymbol{\beta}$, i.e. taking derivative with respect to each $\beta_j$. 
+
+Solution: See the pdf file attached.
+
+### 2.3
+
+Show that for the fitted values $\widehat{\mu}_i$ from maximum likelihood estimates
+$$
+\sum_i \widehat{\mu}_i = \sum_i y_i.
+$$
+Therefore the deviance reduces to
+$$
+D = 2 \sum_i y_i \log \frac{y_i}{\widehat{\mu}_i}.
+$$
+
+Solution: See the pdf file attached.
+
+## Q3. Simpson's paradox
+
+The dataset `death` contains data on murder cases in Florida in 1977. The data is cross-classified by the race (black or white) of the victim, of the defendant and whether the death penalty was given.
+
+### 3.1 
+Consider the frequency with which the death penalty is applied to black and white defendants, both marginally and conditionally, with respect to the race of the victim. Is this an example of Simpson's paradox? Are the observed differences in the frequency of application of the death penalty statistically significant?
+
+```{r}
+library(faraway)
+library(dplyr)
+data(death)
+
+m.death <-xtabs(y~ penalty + defend, data = death)
+m.death
+summary(m.death)
+```
+Because the p-value is 0.6379, which is greater than the significant level $\alpha$ 0.05, we do not reject the null hypothesis and conclude that there is no association between death penalty and the race of the defendants if we consider them marginally.
+
+```{r}
+c.death = xtabs(y~ penalty + defend + victim, data = death)
+c.death
+summary(c.death)
+```
+Because the p-value < 0.001, which is smaller than the significant level $\alpha$ 0.05, we reject the null hypothesis and conclude that there is a association between death penalty and the race of the defendants if we consider them conditionally on the race of the victim. 
+
+```{r}
+marginal = (149 * 19) / (17 * 141)
+marginal
+victim.b = (97.5 * 0.5) / (6.5 * 9.5)
+victim.b
+victim.w = (52 * 19) / (11 * 132)
+victim.w
+```
+
+Additionally, we can see that the marginal odds ratio is 1.18, and two conditional odds ratios are 0.79 and 0.68 (smaller than 1). 
+
+In this case, it is the Simpson's Paradox, when the marginal association contradicts the conditional association between death penalty and the race of the defendants.
+
+
+### 3.2
+Determine the most appropriate dependence model between the variables.
+
+```{r}
+glm(y ~ (penalty + victim + defend)^2, family = poisson, data = death) %>%
+  step()
+
+glm(y ~ penalty*victim + victim*defend, family = poisson, data = death) %>%
+  summary()
+```
+By the Stepwise Algorithm, we choose the model by AIC and get the model which suggests that given victim, penalty and defend are independent.
+
+The conditional independence model has the smallest AIC and residual deviance, thus, it is the most appropriate model.
+
+### 3.3
+Fit a binomial regression with death penalty as the response and show the
+relationship to your model in the previous question.
+
+```{r}
+deathu = cbind(matrix(death$y, ncol = 2, byrow = TRUE), 
+               unique(death %>% select(victim, defend)))
+colnames(deathu)[1:2] = c('yes','no')
+glm(cbind(yes, no) ~ victim * defend, family = binomial, data = deathu) %>%
+  step(test = "Chi") %>%
+  summary()
+```
+We fit the binomial model with death penalty as the response. The final model has `victim` as the single predictor.
+
+The residual deviance is the same as that from the **conditional independence** model, meaning the two models are equivalent.
+
