@@ -1,0 +1,169 @@
+---
+title: "Biostat 200C Homework 3"
+subtitle: Due May 14 @ 11:59PM
+author: Yenlin Lai
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+library(faraway)
+library(tidyverse)
+```
+
+
+## Q1.
+
+The **log-logistic** distribution with the probability density function
+
+$$
+f(y) = \frac{e^{\theta}\lambda y^{\lambda-1}}{(1+e^{\theta}y^{\lambda})^2}
+$$
+is sometimes used for modelling survival times.
+
+- (a) Find the survivor function $S(y)$, the hazard function $h(y)$ and the cumulative hazard function $H(y)$.
+
+**Solution:** See the pdf file attached.
+
+- (b) Show that the median survival time is $\exp(-\theta/\lambda)$.
+
+**Solution:** See the pdf file attached.
+
+- (c) Use R to plot the hazard function for $\lambda=1$ and $\lambda=5$ with $\theta=-5$, $\theta=-2$, and $\theta=1/2$, in one figure.
+
+**Solution:**
+```{r}
+y <- seq(0, 10, by = 0.1)
+loglog <- tibble(x = rep(y,6),
+       pdf = c(
+         hy1 = (exp(1/2) * 1 * y^(1-1)) / (1 + exp(1/2) * y^1),
+         hy2 = (exp(-2) * 1 * y^(1-1)) / (1 + exp(-2) * y^1),
+         hy3 = (exp(-5) * 1 * y^(1-1)) / (1 + exp(-5) * y^1),
+         hy4 = (exp(1/2) * 5 * y^(5-1)) / (1 + exp(1/2) * y^5),
+         hy5 = (exp(-2) * 5 * y^(5-1)) / (1 + exp(-2) * y^5),
+         hy6 = (exp(-5) * 5 * y^(5-1)) / (1 + exp(-5) * y^5)),
+       parameter = as.factor(rep(c("lambda = 1, theta = 1/2",
+                                   "lambda = 1, theta = -2",
+                                   "lambda = 1, theta = -5",
+                                   "lambda = 5, theta = 1/2",
+                                   "lambda = 5, theta = -2",
+                                   "lambda = 5, theta = -5"),
+                                 each = 101)))
+ggplot(loglog) +
+  geom_line(mapping = aes(x = x, y = pdf, 
+                          col = parameter)) +
+  labs(x = "y", y = "h(y)", title = "Hazard Function of Log-logistic Distribution")
+
+```
+
+## Q2. ELMR Exercise 7.5
+
+The data arise from a large postal survey on the psychology of debt. The frequency of credit card use `ccarduse` is a three-level factor ranging from never, occasionally to regularly.
+
+```{r}
+data(debt)
+help(debt)
+```
+
+- (a) Declare the response as an ordered factor and make a plot showing the relationship to `prodebt`. Comment on the plot. Use a table or plot to display the relationship between the response and the income group.
+
+**Solution:**
+```{r}
+library(ggplot2)
+ggplot(data = debt) +
+    geom_boxplot(mapping = aes(y = prodebt, x = as.factor(ccarduse),
+                             colour = as.factor(ccarduse))) + 
+  labs(x = "How often did they use credit cards?",
+       y = "Score on a scale of attitudes to debt",
+       colour = "Use of Credit Card") +
+  scale_x_discrete(labels = c("never","occasionally","regularly","NA")) +
+  scale_colour_discrete(labels = c("never","occasionally","regularly","NA"))
+```
+The relationship between `ccarduse` and `prodebt` is shown above in the box plots. We can observe that the more often of using credit cards, the higher scores on a scale of attitudes to debt.
+
+```{r}
+ggplot(data = debt) +
+  geom_count(mapping = aes(x = as.factor(ccarduse),
+                           y = as.factor(incomegp))) +
+  scale_x_discrete(labels = c("never","occasionally","regularly","NA")) +
+  labs(y = "Income group", x = "How often did they use credit cards?")
+```
+The relationship between `ccarduse` and `incomegp` is shown above. In y-axis, income group = 1 had the lowest income, while income group = 5 had the highest income. From the graph above, we can observe that the higher income group tended to use credit cards more often; in the other hand, the lower income group tended to never use the credit cards.
+
+- (b) Fit a proportional odds model for credit card use with all the other variables as predictors. What are the two most significant predictors and what is their qualitative effect on the response? What is the least significant predictor?
+
+**Solution:**
+```{r}
+library(MASS)
+pb <- polr(as.factor(ccarduse) ~ ., data = na.omit(debt))
+summary(pb)
+```
+From the results above, we can see that the two most significant predictors are `incomegp`(income group, 1=lowest and 5=highest) and `bankacc` (1 = the respondent have a bank account, 0 = the respondent do not have a bank account) since these two predictors have the highest absolute t-value.
+
+When `incomegp` increases one unit, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{0.47131} = 1.60$. For the respondent who have a bank account, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{2.10270} = 8.19$ comparing to those who do not have a bank account.
+
+The least significant predictor in this model is `house` because its corresponding t-value is closet to zero.
+
+- (c) Use stepwise AIC to select a smaller model than the full set of predictors. You will need to handle the missing values carefully. Report on the qualitative effect of the predictors in your chosen model. Can we conclude that the predictors that were dropped from the model have no relation to the response?
+
+**Solution:**
+```{r}
+pbsw <- step(pb)
+summary(pbsw)
+```
+The final model we selected using stepwise AIC has six predictors: `incomegp`, `agegp`, `bankacc`, `bsocacc`, `cigbuy`, `prodebt`.
+
+When `incomegp` increases one unit, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{0.4589} = 1.58$. 
+
+Similarly, When `agegp` increases one unit, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{0.2696} = 1.31$. 
+
+For the respondent who have a bank account, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{2.0816} = 8.02$ comparing to those who do not have a bank account. 
+
+Similarly, for the respondent who have a building society account, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{0.5048} = 1.66$ comparing to those who do not have a building society account. 
+
+For the respondent who buys cigarettes, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{-0.7677} = 0.46$ comparing to those who does not buy cigarettes.
+
+Finally, when `prodebt` increases one unit, the odds of the frequency of using credit cards going up by one unit (from normal to occasionally, or from occasionally to regularly) is $e^{0.5635} = 1.76$. 
+
+We cannot conclude that the predictors that were dropped from the model have no relation to the response. They might still have some relation to the response, but can be explained by other predictors. That is to say, the predictors might be correlated, so we only need some of them to explain the full model.
+
+- (d) Compute the median values of the predictors in your selected model. At these median values, compare the predicted outcome probabilities for both smokers and nonsmokers.
+
+**Solution:**
+```{r}
+newdata_smoker <- data.frame(
+  incomegp = median(debt$incomegp, na.rm = TRUE),
+  agegp = median(debt$agegp, na.rm = TRUE),
+  bankacc = median(debt$bankacc, na.rm = TRUE),
+  bsocacc = median(debt$bsocacc, na.rm = TRUE),
+  prodebt = median(debt$prodebt, na.rm = TRUE),
+  cigbuy = 1)
+newdata_nonsmoker <- data.frame(
+  incomegp = median(debt$incomegp, na.rm = TRUE),
+  agegp = median(debt$agegp, na.rm = TRUE),
+  bankacc = median(debt$bankacc, na.rm = TRUE),
+  bsocacc = median(debt$bsocacc, na.rm = TRUE),
+  prodebt = median(debt$prodebt, na.rm = TRUE),
+  cigbuy = 0)
+predict(pbsw, newdata_smoker, type = "prob")
+predict(pbsw, newdata_nonsmoker, type = "prob")
+```
+After computing the median values of the predictors in the selected model, we got the probability of the smoking respondent had never used credit cards (0.61) is higher than the non-smoking respondent (0.42). The non-smoking respondent has a higher probability of using credit cards occasionally or regularly comparing to the smoking one. 
+
+- (e) Fit a proportional hazards model to the same set of predictors and recompute the two sets of probabilities from the previous question. Does it make a difference to use this type of model?
+
+**Solution:**
+```{r}
+pe <- polr(as.factor(ccarduse) ~ incomegp + agegp + bankacc + bsocacc
+           + cigbuy + prodebt , data = na.omit(debt), method = "cloglog")
+summary(pe)
+
+predict(pe, newdata_smoker, type = "prob")
+predict(pe, newdata_nonsmoker, type = "prob")
+```
+From the results above, we still got the same conclusion that the probability of the smoking respondent had never used credit cards (0.55) is higher than the non-smoking respondent (0.44), and the non-smoking respondent has a higher probability of using credit cards occasionally or regularly comparing to the smoking one. (For the respondent using credit cards occasionally, the probability are closer for the smokers and non-smokers.)
+Overall, it does not make a difference to use a proportional hazards model comparing to a proportional odds model.
+
+
+
+
