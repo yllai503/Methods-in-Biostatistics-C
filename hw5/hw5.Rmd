@@ -1,0 +1,165 @@
+---
+title: "Biostat 200C Homework 5"
+subtitle: Due 11:59PM June 2nd
+author: Yenlin Lai
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+library(tidyverse)
+library(faraway)
+```
+
+## Q1. Doctor visits in Australia, ELMR Exercise 13.4 
+
+```{r}
+data(dvisits)
+help("dvisits")
+```
+
+The `dvisits` data comes from the Australian Health Survey of 1977-78 and consist of 5190 single adults where young and old have been oversampled. Use `help("dvisits")` to check the variables.
+
+(a) Build a generalized additive model with `doctorco` as the response and `sex`, `age`,`agesq`, `income`, `levyplus`, `freepoor`, `freerepa`, `illness`, `actdays`, `hscore`, `chcond1` and `chcond2` as possible predictor variables. Select an appropriate size for your model. (Hint. fit a simpler model first and check some marginal plots.)
+
+**Solution:**
+Check the marginal plots first. From the marginal plots below, we can see that some of the variables (`sex`, `levyplus`, `freepoor`, `freerepa`, `chcond1` and `chcond2`) cannot fit a spline/smooth in the generalized additive model.
+```{r}
+predlist <- setdiff(colnames(dvisits), 
+                   c("doctorco", "nondocco", "hospadmi", "hospdays",
+                     "medicine", "prescrib", "nonpresc"))
+dvisits %>% 
+  pivot_longer(all_of(predlist), 
+               names_to = "predictor", values_to = "value") %>%
+  ggplot() +
+  geom_point(aes(x = value, y = doctorco)) +
+  facet_wrap(~ predictor, scales = "free") +
+  geom_smooth(aes(x = value, y = doctorco)) 
+```
+
+We then fit a simpler model - generalized linear model (poisson regression model).
+
+```{r}
+lmod = glm(doctorco ~ sex + age + agesq + income + levyplus + freepoor + 
+            freerepa + illness + actdays + hscore + chcond1 + chcond2
+          ,data = dvisits, family = "poisson")
+summary(lmod)
+halfnorm(cooks.distance(lmod))
+```
+
+The influential plot suggests that case 115 is an outlier. We remove this observation for the following analyses.
+
+```{r}
+dvisits2 <- dvisits[-115,]
+lmod2 = glm(doctorco ~ sex + age + agesq + income + levyplus + freepoor + 
+            freerepa + illness + actdays + hscore + chcond1 + chcond2
+          ,data = dvisits2, family = "poisson")
+summary(lmod2)
+halfnorm(cooks.distance(lmod2))
+```
+
+It seems that there is no outliers in the sub-setting data. Use the package `gam` to fit the generalized additive model, with poisson distribution.
+
+```{r}
+library(gam)
+amod <- gam(doctorco ~ sex + s(age) + s(agesq) + s(income) + levyplus + freepoor
+            + freerepa + s(illness, 6) + s(actdays) + s(hscore) + chcond1
+            + chcond2, data = dvisits2, scale = -1, family = "poisson")
+summary(amod)
+```
+
+We use stepwise method to choose the optimal model.
+
+```{r}
+scope_list = list(
+  "age" = ~1 + s(age) + s(age, 2) + s(age, 3),
+  "agesq" = ~1 + s(agesq) + s(agesq, 2) + s(agesq, 3),
+  "income" = ~1 + s(income) + s(income, 2) + s(income, 3),
+  "illness" = ~1 + s(illness) + s(illness, 2) + s(illness, 3) + s(illness, 4),
+  "actdays" = ~1 + s(actdays) + s(actdays, 2) + s(actdays, 3),
+  "hscore" = ~1 + s(hscore) + s(hscore, 2) + s(hscore, 3),
+  "sex" = ~1 + sex,
+  "levyplus" = ~1 + levyplus,
+  "freepoor" = ~1 + freepoor,
+  "freerepa" = ~1 + freerepa,
+  "chcond1" = ~1 + chcond1,
+  "chcond2" = ~1 + chcond2)
+step.Gam(amod, scope_list)
+
+amod2 <- gam(doctorco ~ s(illness, 6) + s(age, 2) + s(income, 2) + s(actdays) +
+               s(hscore, 2) + sex + freepoor, family = "poisson", 
+             data = dvisits2, scale = -1)
+summary(amod2)
+```
+
+The final model is `doctorco ~ s(illness, 6) + s(age, 2) + s(income, 2) + s(actdays) + s(hscore, 2) + sex + freepoor`, and all the variables are significant. We then fit the final model again to the package `mgcv` to plot the transformations on the predictors identified by the additive model. 
+
+```{r}
+amod3 <- mgcv::gam(doctorco ~ s(illness, k = 6) + s(age, k = 2) + 
+                     s(income, k = 2) + s(actdays) + s(hscore, k = 2) + sex +
+                     freepoor, family = "poisson", data = dvisits2, scale = -1)
+summary(amod3)
+plot(amod3, residuals = TRUE, page = 1)
+```
+
+We can see that the confidence bands do not highly overlap with `s() = 0` for those variables, thus, these variables are significant.
+
+(b) Check the diagnostics.
+
+**Solution:**
+```{r}
+library(mgcv)
+halfnorm(cooks.distance(amod3))
+gam.check(amod3)
+```
+
+From the output, the small p-value indicates the residuals are not randomly distributed. Since we have all the p-values greater than 0.05, we can say the residuals for each variables are randomly distributed.
+
+From the diagnostics plots above, the Q-Q plot do not fit well, which means the data may not meet the normality. For the `histogram of residuals`, the distribution should be bell-shaped and centered at 0, and our model seems to not be the best. We also expect to see the dots are evenly distributed and centered at 0 in the `resid vs. linear pred.` plot, and the dots should be lined up in the `response vs. fitted values` plot; therefore, the model does not fit really well.
+
+
+(c) What sort of person would be predicted to visit the doctor the most under your selected model?
+
+**Solution:**
+```{r}
+summary(amod3)
+```
+
+The estimated coefficients for `sex` is 0.156, which means female would be predicted to visit the doctor more than male.
+The estimated coefficients for `freepoor` is -0.73, which means people who covered by government because low income, recent immigrant, unemployed would be predicted to visit the doctor more.
+
+```{r}
+plot(amod3, page = 1)
+```
+From the plots shown above, people whose `illness` are 2 to 5, `age` are 72, `income` are less than 200, `actdays` are 11.5, and `hscore` are 12 have a highest probability to visit the doctor the most.
+
+Combine the two results, and we get people who is female and covered by government because low income, recent immigrant, unemployed, and whose `illness` are 2 to 5, `age` are 72, `income` are less than 200, `actdays` are 11.5, and `hscore` are 12 would be predicted to visit the doctor the most.
+
+
+(d) For the last person in the dataset, compute the predicted probability distribution for their visits to the doctor, i.e., give the probability they visit 0,1, 2, etc. times.
+
+**Solution:**
+```{r}
+predict(amod3, dvisits2[5189,], type = "response")
+```
+
+The parameter of poisson distribution for the last person in the dataset is 0.1037571.
+
+```{r}
+dpois(0, 0.1037571)
+dpois(1, 0.1037571)
+dpois(2, 0.1037571)
+dpois(3, 0.1037571)
+dpois(4, 0.1037571)
+dpois(5, 0.1037571)
+dpois(6, 0.1037571)
+dpois(7, 0.1037571)
+dpois(8, 0.1037571)
+dpois(9, 0.1037571)
+```
+
+The probability they visit 0 time is 0.9014442;
+the probability they visit 1 time is 0.09353124;
+the probability they visit 2 times is 0.004852265;
+the probability they visit 3 times is 0.000167819;
+the probabilities they visit 4,5,6,7,8, and 9 times are almost 0.
