@@ -1,0 +1,192 @@
+---
+title: "Biostat 200C Homework 1"
+subtitle: Due Apr 12 @ 11:59PM
+output: pdf_document
+author: Yenlin Lai
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, warning = FALSE)
+```
+
+To submit homework, please upload both RMD and pdf files to CCLE by the deadline.
+
+## Q1. Binomial Distribution
+
+Let $Y_i$ be the number of successes in $n_i$ trials with 
+
+$$Y_i\sim Bin(n_i, \pi_i),$$
+where the probabilities $\pi_i$ have a Beta distribution
+
+$$ \pi_i \sim Beta(\alpha,\beta).$$
+The probability density function for the Beta distribution is $f(x;\alpha, \beta) = x^{\alpha-1}(1-x)^{\beta -1}/B(\alpha,\beta)$ for $x\in [0,1], \alpha>0, \beta>0$, and the beta function $B(\alpha,\beta)$ defining the normalizing constant required to ensure that $\int_0^1f(x;\alpha, \beta) = 1$. Let $\theta = \alpha/(\alpha +\beta)$, show that
+
+\begin{itemize}
+\item[a.] $E(\pi_i) = \theta$ 
+\item[b.] $Var(\pi_i) = \theta(1-\theta)/(\alpha +\beta+1) = \phi\theta(1-\theta)$ 
+\item[c.] $E(Y_i) = n_i\theta$ 
+\item[d.] $Var(Y_i) =n_i \theta(1-\theta)[1+(n_i-1)\phi]$ so that  $Var(Y_i)$ is larger than the Binomial variance (unless $n_i=1$ or $\phi = 0$).
+\end{itemize}
+
+Solution: See the pdf file attached.
+
+## Q2. (ELMR Chapter 3 Exercise 1) 
+
+A case-control study of esophageal cancer in Ileet-Vilaine, France. 
+```{r}
+data(esoph)
+help(esoph)
+library(dplyr)
+esoph <- esoph %>% 
+  as_tibble() %>% 
+  print()
+```
+
+### a. Plot the proportion of cases against each predictor using the size of the point to indicate the number of subject as seen in Figure 2.7. Comment on the realtionships seen in the plots.
+
+Solution:
+```{r}
+library(ggplot2)
+esoph %>% 
+  group_by(agegp) %>% 
+  summarise(ncases = sum(ncases), ncontrols = sum(ncontrols)) %>% 
+  mutate(n = ncases + ncontrols,
+         rate_agegp = ncases / n) %>% 
+  ggplot(mapping = aes(x = agegp, y = rate_agegp, size = n)) +
+  geom_point() +
+  labs(x = "Age group", y = "Proportion of cases",
+       title = "Esophageal cancer data")
+```
+From the proportion of cases against age group plot shown above, higher age could lead to higher proportion of cases, i.e., older people were more likely to get esophageal cancer. Note that for age 75+ group, the proportion of cases dropped due to smaller sample size.
+```{r}
+esoph %>% 
+  group_by(alcgp) %>% 
+  summarise(ncases = sum(ncases), ncontrols = sum(ncontrols)) %>% 
+  mutate(n = ncases + ncontrols,
+         rate_alcgp = ncases / n) %>% 
+  ggplot(mapping = aes(x = alcgp, y = rate_alcgp, size = n)) +
+  geom_point() +
+  labs(x = "Alcohol consumption", y = "Proportion of cases",
+       title = "Esophageal cancer data")
+```
+From the proportion of cases against alcohol consumption plot shown above, higher alcohol consumption per day could lead to higher proportion of cases, i.e., consuming more alcohol was more likely to get a esophageal cancer.
+```{r}
+esoph %>% 
+  group_by(tobgp) %>% 
+  summarise(ncases = sum(ncases), ncontrols = sum(ncontrols)) %>% 
+  mutate(n = ncases + ncontrols,
+         rate_tobgp = ncases / n) %>% 
+  ggplot(mapping = aes(x = tobgp, y = rate_tobgp, size = n)) +
+  geom_point() +
+  labs(x = "Tobacco consumption", y = "Proportion of cases",
+       title = "Esophageal cancer data")
+```
+From the proportion of cases against tobacco consumption plot shown above, higher tobacco consumption per day could lead to higher proportion of cases, i.e., consuming more tobacco was more likely to get a esophageal cancer. Note that there seems to be no differences in proportion of cases between consuming 10-19 and 20-29 gm per day.
+
+### b. Fit a binomial GLM with interactions between all three predictors. Use AIC as a criterion to select a model using the `step` function. Which model is selected?
+
+Solution:
+```{r}
+modelb <- 
+  glm(cbind(ncases, ncontrols) ~ (agegp + alcgp + tobgp)^2,
+      data = esoph, family = "binomial")
+summary(modelb)
+
+step(modelb)
+```
+The model below is selected using AIC as the criterion (smallest AIC).
+```{r}
+modelb.final <- 
+  glm(cbind(ncases, ncontrols) ~ agegp + alcgp + tobgp,
+      data = esoph, family = "binomial")
+summary(modelb.final)
+```
+
+### c. All three factors are ordered and so special contrasts have been used appropriate for ordered factors involving linear, quadratic and cubic terms. Further simplification of the model may be possible by eliminating some of these terms. Use the `unclass` function to convert the factors to a numerical representation and check whether the model may be simplified.
+
+Solution:
+```{r}
+modelc <- 
+  glm(cbind(ncases, ncontrols) ~ 
+        unclass(agegp) + unclass(tobgp) + unclass(alcgp),
+        data = esoph, family = binomial())
+summary(modelc)
+```
+The model has been simplified when we convert the factors to the numerical representation. The quadratic, cubic and other terms are droppped.
+
+### d. Use the summary output of the factor model to suggest a model that is slightly more complex than the linear model proposed in the previous question.
+
+Solution:
+From the factor model in part b, we can observe that the estimated coefficients for agegp.L, agegp.Q, alcgp.L, alcgp.C, and tobgp.L are significant. We then include the agegp, agegp^2, alcgp, and tobgp in the new linear model which is slightly more complex than the previous one. Note that the predictor alcgp^3 is not included since its lower effect alcgp^2 is not significant; in that case, include alcgp^3 would not make sense.
+
+```{r}
+modeld <- 
+  glm(cbind(ncases, ncontrols) ~ 
+        unclass(agegp) + I(unclass(agegp)^2) + unclass(tobgp) + unclass(alcgp),
+        data = esoph, family = "binomial")
+summary(modeld)
+```
+
+### e. Does your final model fit the data? Is the test you use appropriate for this data?
+
+Solution:
+```{r}
+pchisq(modeld$deviance, modeld$df.residual, lower = FALSE)
+```
+By the analysis of deviance, we get the p-value to be 0.209, which is greater than the significant level $\alpha$ 0.05. Thus, we do not reject the null hypothesis, and conclude that the final model fits the data. In this data, the distribution is binomial, and the sample size for each group is not always large ($\ge$ 5). Therefore, the $\chi^2$ test is inappropriate for this data.
+
+```{r}
+esoph <- 
+  esoph %>% mutate(n = ncases + ncontrols)
+predprob <- predict(modeld, type = "response")
+px2 <- sum((esoph$ncases - esoph$n * predprob)^2 / (esoph$n * predprob * (1 - predprob)))
+pchisq(px2, modeld$df.residual, lower.tail = FALSE)
+```
+We then use Pearson $\chi^2$ test to test the goodness of fit for this data. The p-value is 0.245, which is greater than the significant level $\alpha$ 0.05. We do not reject the null hypothesis (the fitted model equals to saturated model), and conclude that the final model fits the data.
+
+### f. Check for outliers in your final model.
+
+Solution:
+```{r}
+esoph %>%
+  mutate(devres = residuals(modeld, type = "deviance"),
+         linpred = predict(modeld, type = "link")) %>%
+  ggplot(mapping = aes(x = linpred, y = devres)) +
+  geom_point() +
+  labs(x = "Linear predictor", y = "Deviance residual")
+```
+From the deviance residual plot, we can identify potential high residual observations. We do not find outliers here. We further determine which observations have high leverage or influence by using the following two plots.
+```{r}
+library(faraway)
+halfnorm(hatvalues(modeld))
+```
+From the plot sorted hat values against half-normal quantiles, we can identify potential high leverage observations are 63(age: 65-74 years, alcohol consumption: 0-39 gm/day, tobacco consumption: 0-9 gm/day) and 78(age: 75+ years, alcohol consumption: 0-39 gm/day, tobacco consumption: 0-9 gm/day).
+
+```{r}
+halfnorm(cooks.distance(modeld))
+```
+From the plot sorted Cook distances against the half-normal quantiles, we can identify potential high influential observations are 71(age: 65-74 years, alcohol consumption: 80-119 gm/day, tobacco consumption: 10-19 gm/day) and 67(age: 65-74 years, alcohol consumption: 40-79 gm/day, tobacco consumption: 0-9 gm/day).
+
+
+### g. What is the predicted effect of moving one category higher in alcohol consumption?
+
+Solution:
+```{r}
+library(gtsummary)
+modeld %>% 
+  tbl_regression(intercept = TRUE, exponentiate = TRUE)
+```
+From the table above, we can conclude that moving one category higher in alcohol consumption has the odds of being more likely to get a esophageal cancer is multiplied 2.90 times (i.e., increases 190%), holding constant all other variables.
+
+### h. Compute a 95\% confidence interval for this predicted effect.
+
+Solution:
+```{r}
+modeld %>% 
+  tbl_regression(intercept = TRUE, exponentiate = TRUE)
+```
+From the same table above, we can conclude that the 95% confidence interval for the odds of being more likely to get a esophageal cancer is multiplied 2.37 to 3.58 times when moves one category higher in alcohol consumption, holding constant all other variables.
+
+
+
+
